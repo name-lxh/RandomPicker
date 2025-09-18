@@ -12,7 +12,7 @@
         <!-- 标题 -->
         <TextView
             android:id="@+id/titleTextView"
-            android:text="随机抽选器 v1.1"
+            android:text="随机抽选器 v1.2"
             android:textSize="22sp"
             android:textStyle="bold"
             android:layout_width="wrap_content"
