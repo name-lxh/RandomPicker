@@ -1,122 +1,241 @@
 package com.lxh.randompicker
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Bundle
-import android.view.inputmethod.InputMethodManager
-import android.widget.Toast
+import android.view.View
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import com.lxh.randompicker.databinding.ActivityMainBinding
-import kotlin.random.Random
+import androidx.lifecycle.lifecycleScope
+import com.lxh.randompicker.data.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Random
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityMainBinding
+    private lateinit var db: AppDatabase
+    private lateinit var tablesDao: TablesDao
+    private lateinit var itemsDao: ItemsDao
+    private lateinit var settings: SettingsStore
 
-    private var original: MutableList<String> = mutableListOf()
-    private var pool: MutableList<String> = mutableListOf()
-    private var history: MutableList<String> = mutableListOf()
-    private var lastInputCanonical: String = ""
+    private lateinit var tableSpinner: Spinner
+    private lateinit var noRepeatCheck: CheckBox
+    private lateinit var inputEditText: EditText
+    private lateinit var saveAsNewTableButton: Button
+    private lateinit var overwriteTableButton: Button
+    private lateinit var setDefaultButton: Button
+    private lateinit var resetDrawnButton: Button
+    private lateinit var pickButton: Button
+    private lateinit var resultTextView: TextView
+    private lateinit var drawnListText: TextView
+
+    private var currentTables: List<TableEntity> = emptyList()
+    private var currentTableId: Long? = null
+    private fun confirmDeleteCurrentTable() {
+        val pos = tableSpinner.selectedItemPosition
+        val table = currentTables.getOrNull(pos)
+            ?: return toast("暂无可删除的表")
+
+        if (currentTables.size <= 1) {
+            toast("至少保留一个表，无法删除最后一个")
+            return
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("删除表")
+            .setMessage("确认删除表「${table.name}」？该表的所有条目也会被删除。")
+            .setPositiveButton("删除") { d, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val defaultId = settings.defaultTableIdFlow.first()
+                    tablesDao.delete(table) // 级联删除 items
+
+                    val remain = tablesDao.getAll()
+                    if (remain.isNotEmpty()) {
+                        if (defaultId == table.id) {
+                            settings.setDefaultTableId(remain.first().id)
+                        }
+                    } else {
+                        // 理论上不会走到这里，兜底清空默认
+                        settings.clearDefaultTableId()
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        toast("已删除表：${table.name}")
+                        refreshDrawnList()
+                    }
+                }
+                d.dismiss()
+            }
+            .setNegativeButton("取消") { d, _ -> d.dismiss() }
+            .show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_main)
 
-        binding.btnPick.setOnClickListener { onPick() }
-        binding.btnReset.setOnClickListener { onReset() }
-        binding.btnCopy.setOnClickListener { onCopy() }
+        db = AppDatabase.get(this)
+        tablesDao = db.tablesDao()
+        itemsDao = db.itemsDao()
+        settings = SettingsStore(this)
 
-        binding.etInput.hint = "用逗号、空格或换行分隔，例如：\n麻辣烫，寿司，拉面 烤肉\n米线; 汉堡 可乐鸡翅"
-        updateUi()
-    }
+        bindViews()
+        bindClicks()
 
-    private fun onPick() {
-        syncFromInput()
-        if (original.isEmpty()) {
-            toast("请输入一些选项（用逗号、空格或换行分隔）")
-            return
+        // 观察表变化，刷新下拉框
+        lifecycleScope.launch {
+            tablesDao.observeAll().collect { tables ->
+                currentTables = tables
+                val names = tables.map { it.name }
+                tableSpinner.adapter =
+                    ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, names)
+
+                // 长按 Spinner 删除当前选中的表
+                tableSpinner.setOnLongClickListener {
+                    confirmDeleteCurrentTable()
+                    true
+                }
+
+                ensureSelectDefaultIfPossible()
+                refreshDrawnList()
+            }
         }
 
-        val noRepeat = binding.switchNoRepeat.isChecked
-        val pickFrom = if (noRepeat) pool else original
 
-        if (pickFrom.isEmpty()) {
-            toast("已全部抽完啦，点“重置”再来一轮～")
-            return
-        }
-
-        val index = Random.nextInt(pickFrom.size)
-        val picked = pickFrom[index]
-        if (noRepeat) {
-            pool.removeAt(index)
-        }
-        history.add(picked)
-
-        binding.tvResult.text = picked
-        updateUi()
-        hideKeyboard()
-    }
-
-    private fun onReset() {
-        syncFromInput(force = true)
-        pool = original.toMutableList()
-        history.clear()
-        binding.tvResult.text = "—"
-        updateUi()
-    }
-
-    private fun onCopy() {
-        val result = binding.tvResult.text?.toString()?.trim().orEmpty()
-        if (result.isEmpty() || result == "—") {
-            toast("还没有结果可复制")
-            return
-        }
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("随机抽选结果", result))
-        toast("已复制：$result")
-    }
-
-    private fun syncFromInput(force: Boolean = false) {
-        val parsed = parseInput(binding.etInput.text?.toString().orEmpty())
-        val canonical = parsed.joinToString("|")
-        if (force || canonical != lastInputCanonical) {
-            original = parsed.toMutableList()
-            pool = original.toMutableList()
-            history.clear()
-            lastInputCanonical = canonical
+        // 加载“不重复抽取”开关
+        lifecycleScope.launch {
+            noRepeatCheck.isChecked = settings.noRepeatFlow.first()
         }
     }
 
-    private fun parseInput(raw: String): List<String> {
-        // 支持中文/英文逗号、分号、空格、制表符与换行
-        val splitter = Regex("[,，;；\\s]+")
-        val items = raw.split(splitter)
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-        // 去重且保序
-        val seen = LinkedHashSet<String>()
-        val deduped = ArrayList<String>()
-        for (s in items) if (seen.add(s)) deduped.add(s)
-        return deduped
+    private suspend fun ensureSelectDefaultIfPossible() {
+        val defaultId = settings.defaultTableIdFlow.first()
+        val targetId = defaultId ?: currentTables.firstOrNull()?.id
+        currentTableId = targetId
+        val idx = currentTables.indexOfFirst { it.id == targetId }
+        if (idx >= 0) tableSpinner.setSelection(idx)
     }
 
-    private fun updateUi() {
-        val total = original.size
-        val remain = pool.size
-        binding.tvStats.text = "剩余：$remain / 总计：$total"
-        val recent = if (history.size <= 20) history else history.takeLast(20)
-        binding.tvHistory.text = if (recent.isEmpty()) "（暂无）"
-        else recent.joinToString("、")
+    private fun bindViews() {
+        tableSpinner = findViewById(R.id.tableSpinner)
+        noRepeatCheck = findViewById(R.id.noRepeatCheck)
+        inputEditText = findViewById(R.id.inputEditText)
+        saveAsNewTableButton = findViewById(R.id.saveAsNewTableButton)
+        overwriteTableButton = findViewById(R.id.overwriteTableButton)
+        setDefaultButton = findViewById(R.id.setDefaultButton)
+        resetDrawnButton = findViewById(R.id.resetDrawnButton)
+        pickButton = findViewById(R.id.pickButton)
+        resultTextView = findViewById(R.id.resultTextView)
+        drawnListText = findViewById(R.id.drawnListText)
+
+        tableSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                currentTableId = currentTables.getOrNull(position)?.id
+                lifecycleScope.launch { refreshDrawnList() }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
-    private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.etInput.windowToken, 0)
+    private fun bindClicks() {
+        noRepeatCheck.setOnCheckedChangeListener { _, isChecked ->
+            lifecycleScope.launch { settings.setNoRepeat(isChecked) }
+        }
+
+        saveAsNewTableButton.setOnClickListener {
+            val itemsText = inputEditText.text.toString().trim()
+            if (itemsText.isEmpty()) return@setOnClickListener toast("输入表项（用逗号分隔）")
+
+            promptInput("给这个新表起个名字：") { name ->
+                if (name.isBlank()) return@promptInput toast("表名不能为空")
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val tableId = tablesDao.insert(TableEntity(name = name.trim()))
+                    val itemEntities = itemsText.split(",")
+                        .map { it.trim() }.filter { it.isNotEmpty() }
+                        .map { ItemEntity(tableId = tableId, text = it) }
+                    if (itemEntities.isNotEmpty()) itemsDao.insert(itemEntities)
+                    withContext(Dispatchers.Main) {
+                        toast("已保存为新表")
+                        currentTableId = tableId
+                        val idx = currentTables.indexOfFirst { it.id == tableId }
+                        if (idx >= 0) tableSpinner.setSelection(idx)
+                        inputEditText.setText("")
+                        refreshDrawnList()
+                    }
+                }
+            }
+        }
+
+        overwriteTableButton.setOnClickListener {
+            val tableId = currentTableId ?: return@setOnClickListener toast("请先选择一个表")
+            val itemsText = inputEditText.text.toString().trim()
+            if (itemsText.isEmpty()) return@setOnClickListener toast("请输入表项（用逗号分隔）")
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                itemsDao.deleteByTable(tableId)
+                val itemEntities = itemsText.split(",")
+                    .map { it.trim() }.filter { it.isNotEmpty() }
+                    .map { ItemEntity(tableId = tableId, text = it) }
+                if (itemEntities.isNotEmpty()) itemsDao.insert(itemEntities)
+                withContext(Dispatchers.Main) {
+                    toast("已覆盖当前表")
+                    inputEditText.setText("")
+                    refreshDrawnList()
+                }
+            }
+        }
+
+        setDefaultButton.setOnClickListener {
+            val tableId = currentTableId ?: return@setOnClickListener toast("请先选择一个表")
+            lifecycleScope.launch { settings.setDefaultTableId(tableId); toast("已设为默认表") }
+        }
+
+        resetDrawnButton.setOnClickListener {
+            val tableId = currentTableId ?: return@setOnClickListener toast("请先选择一个表")
+            lifecycleScope.launch(Dispatchers.IO) {
+                itemsDao.resetDrawn(tableId)
+                withContext(Dispatchers.Main) { toast("已清空已抽到"); refreshDrawnList() }
+            }
+        }
+
+        pickButton.setOnClickListener {
+            val tableId = currentTableId ?: return@setOnClickListener toast("暂无可用表，请先新建或等待预置表加载")
+            lifecycleScope.launch(Dispatchers.IO) {
+                val noRepeat = settings.noRepeatFlow.first()
+                val candidates = if (noRepeat) itemsDao.getUndrawn(tableId) else itemsDao.getByTable(tableId)
+                if (candidates.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        toast(if (noRepeat) "本表已抽完，请清空已抽到或添加新项" else "当前表为空")
+                    }
+                    return@launch
+                }
+                val pick = candidates[Random().nextInt(candidates.size)]
+                if (noRepeat && !pick.isDrawn) itemsDao.markDrawn(pick.id, System.currentTimeMillis())
+                withContext(Dispatchers.Main) {
+                    resultTextView.text = "抽中了：${pick.text}"
+                    refreshDrawnList()
+                }
+            }
+        }
     }
 
-    private fun toast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private suspend fun refreshDrawnList() {
+        val tableId = currentTableId ?: return
+        val all = withContext(Dispatchers.IO) { itemsDao.getByTable(tableId) }
+        val drawn = all.filter { it.isDrawn }.sortedBy { it.drawnAt ?: 0L }
+        drawnListText.text = if (drawn.isEmpty()) "（暂无）" else drawn.joinToString("，") { it.text }
     }
+
+    private fun promptInput(title: String, onOk: (String) -> Unit) {
+        val edit = EditText(this).apply { hint = "请输入" }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(edit)
+            .setPositiveButton("确定") { d, _ -> onOk(edit.text.toString()); d.dismiss() }
+            .setNegativeButton("取消") { d, _ -> d.dismiss() }
+            .create().show()
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
