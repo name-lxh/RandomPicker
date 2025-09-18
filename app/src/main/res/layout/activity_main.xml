@@ -1,137 +1,142 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="16dp"
-    tools:context=".MainActivity">
-
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="随机抽选器"
-        android:textStyle="bold"
-        android:textSize="24sp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <EditText
-        android:id="@+id/etInput"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="top|start"
-        android:inputType="textMultiLine|textCapSentences"
-        android:minLines="5"
-        android:maxLines="8"
-        android:hint="用逗号、空格或换行分隔多个选项"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/switchNoRepeat" />
-
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switchNoRepeat"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="44dp"
-        android:checked="true"
-        android:text="不重复抽取（抽完需重置）"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/etInput" />
+    android:layout_height="match_parent">
 
     <LinearLayout
-        android:id="@+id/btnRow"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@id/switchNoRepeat"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:padding="16dp"
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
 
-        <Button
-            android:id="@+id/btnPick"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="开始抽取" />
-
-        <Space
-            android:layout_width="8dp"
-            android:layout_height="0dp" />
-
-        <Button
-            android:id="@+id/btnReset"
+        <!-- 标题 -->
+        <TextView
+            android:id="@+id/titleTextView"
+            android:text="随机抽选器 v1.1"
+            android:textSize="22sp"
+            android:textStyle="bold"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="重置" />
+            android:layout_height="wrap_content" />
 
-        <Space
-            android:layout_width="8dp"
-            android:layout_height="0dp" />
+        <!-- 分割线（在标题下） -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:layout_marginTop="8dp"
+            android:background="#22000000" />
 
+        <!-- 抽中结果：移到“选择表”上方，并加大字体 -->
+        <TextView
+            android:id="@+id/resultTextView"
+            android:text=" "
+            android:textSize="35sp"
+            android:textStyle="bold"
+            android:layout_marginTop="30dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <!-- 分割线（在抽取结果下） -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="#22000000" />
+        <!-- 抽取按钮 -->
         <Button
-            android:id="@+id/btnCopy"
+            android:id="@+id/pickButton"
+            android:text="开始抽取！"
+            android:textSize="24sp"
+            android:layout_marginTop="10dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <!-- 多表选择（保持原来功能不变） -->
+        <Spinner
+            android:id="@+id/tableSpinner"
+            android:layout_marginTop="3dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <!-- 不重复抽取 开关 -->
+        <CheckBox
+            android:id="@+id/noRepeatCheck"
+            android:layout_marginTop="2dp"
+            android:text="不重复抽取"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="复制结果" />
+            android:layout_height="wrap_content" />
+        <!-- 已抽到（持久化） -->
+        <TextView
+            android:layout_marginTop="5dp"
+            android:text="已抽到："
+            android:textStyle="bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/drawnListText"
+            android:layout_marginTop="4dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <!-- 分割线（在标题下） -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="#22000000" />
+        <!-- 编辑区（用逗号分隔） -->
+        <EditText
+            android:id="@+id/inputEditText"
+            android:hint="在此输入表项，用逗号分隔（用于新建/编辑表），长按表删除"
+            android:minHeight="100dp"
+            android:gravity="top|start"
+            android:layout_marginTop="12dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <LinearLayout
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/saveAsNewTableButton"
+                android:text="保存为新表"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/overwriteTableButton"
+                android:text="覆盖当前表"
+                android:layout_marginStart="8dp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/setDefaultButton"
+                android:text="设为默认表"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/resetDrawnButton"
+                android:text="清空已抽到"
+                android:layout_marginStart="8dp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+
+
+
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/tvResultLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="抽中了："
-        android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/btnRow"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <TextView
-        android:id="@+id/tvResult"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="—"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:ellipsize="end"
-        android:maxLines="1"
-        app:layout_constraintTop_toTopOf="@id/tvResultLabel"
-        app:layout_constraintStart_toEndOf="@id/tvResultLabel"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <TextView
-        android:id="@+id/tvStats"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="剩余：0 / 总计：0"
-        app:layout_constraintTop_toBottomOf="@id/tvResult"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <TextView
-        android:id="@+id/tvHistoryLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="已抽到（最近）："
-        app:layout_constraintTop_toBottomOf="@id/tvStats"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <TextView
-        android:id="@+id/tvHistory"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="3"
-        android:text="（暂无）"
-        app:layout_constraintTop_toTopOf="@id/tvHistoryLabel"
-        app:layout_constraintStart_toEndOf="@id/tvHistoryLabel"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
